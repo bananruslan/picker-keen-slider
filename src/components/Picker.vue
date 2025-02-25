@@ -43,92 +43,165 @@
 </template>
 
 <script lang="ts" setup>
-import { ref } from 'vue';
+import { ref } from "vue";
 
-import { useKeenSlider } from 'keen-slider/vue.es';
-import 'keen-slider/keen-slider.min.css';
+import { useKeenSlider } from "keen-slider/vue.es";
+import "keen-slider/keen-slider.min.css";
 
-export default {
-  props: {
-    initIdx: { type: Number, default: 0 },
-    loop: { type: Boolean, default: false },
-    length: { type: Number },
-    perspective: { type: String, default: 'center' },
-    label: { type: String, default: '' },
-    width: { type: Number, default: 100 },
-    setValue: { type: Function },
+import type {
+  KeenSliderInstance,
+  KeenSliderOptions,
+  TrackDetails,
+} from "keen-slider/vue.es";
+
+const props = withDefaults(
+  defineProps<{
+    initIdx: number;
+    loop: boolean;
+    length: number;
+    perspective: string;
+    label: string;
+    width: number;
+    setValue: Function;
+  }>(),
+  {
+    initIdx: 0,
+    loop: false,
+    perspective: "center",
+    label: "",
+    width: 100,
   },
-  setup(props) {
-    const wheelSize = 20;
-    const slideDegree = 360 / 20;
-    const slidesPerView = props.loop ? 9 : 1;
-    const height = ref(0);
-    const slideValues = ref([]);
-    const radius = ref(0);
+);
 
-    function setSlideValues(details) {
-      const offset = props.loop ? 1 / 2 - 1 / slidesPerView / 2 : 0;
+const wheelSize = 20;
+const slideDegree = 360 / 20;
+const slidesPerView = props.loop ? 9 : 1;
 
-      const values = [];
-      for (let i = 0; i < props.length; i++) {
-        const distance = (details.slides[i].distance - offset) * slidesPerView;
-        const rotate =
-          Math.abs(distance) > wheelSize / 2
-            ? 180
-            : distance * (360 / wheelSize) * -1;
-        const style = {
-          transform: `rotateX(${rotate}deg) translateZ(${radius.value}px)`,
-          WebkitTransform: `rotateX(${rotate}deg) translateZ(${radius.value}px)`,
-        };
-        const value = props.setValue
-          ? props.setValue(i, details.abs + Math.round(distance))
-          : i;
-        values.push({ style, value });
-      }
-      slideValues.value = values;
-    }
-
-    const options = {
-      slides: {
-        number: props.length,
-        origin: props.loop ? 'center' : 'auto',
-        perView: slidesPerView,
-      },
-      vertical: true,
-      initial: props.initIdx || 0,
-      loop: props.loop,
-      created: (s) => {
-        height.value = s.size;
-        radius.value = height.value / 2;
-        setSlideValues(s.track.details);
-      },
-      updated: (s) => {
-        height.value = s.size;
-      },
-      dragSpeed: (val) => {
-        return (
-          val *
-          (height.value /
-            ((height.value / 2) * Math.tan(slideDegree * (Math.PI / 180))) /
-            slidesPerView)
-        );
-      },
-      detailsChanged: (s) => {
-        setSlideValues(s.track.details);
-      },
-      rubberband: !props.loop,
-      mode: 'free-snap',
+const height = ref(0);
+const radius = ref(0);
+const slideValues = ref<
+  {
+    style: {
+      transform: string;
+      WebkitTransform: string;
     };
-    const [container] = useKeenSlider(options);
-    return { container, slideValues, radius, height };
+    value: number;
+  }[]
+>([]);
+
+function setSlideValues(details: TrackDetails) {
+  // console.log("setSlideValues:", details);
+  const offset = props.loop ? 1 / 2 - 1 / slidesPerView / 2 : 0;
+  const values = [];
+
+  for (let i = 0; i < props.length; i++) {
+    const distance = (details.slides[i].distance - offset) * slidesPerView;
+    const rotate =
+      Math.abs(distance) > wheelSize / 2
+        ? 180
+        : distance * (360 / wheelSize) * -1;
+    const style = {
+      transform: `rotateX(${rotate}deg) translateZ(${radius.value}px)`,
+      WebkitTransform: `rotateX(${rotate}deg) translateZ(${radius.value}px)`,
+    };
+    const value = props.setValue
+      ? props.setValue(i, details.abs + Math.round(distance))
+      : i;
+
+    values.push({ style, value });
+  }
+
+  slideValues.value = values;
+}
+
+const options: KeenSliderOptions = {
+  slides: {
+    number: props.length,
+    origin: props.loop ? "center" : "auto",
+    perView: slidesPerView,
   },
+  vertical: true,
+  initial: props.initIdx || 0,
+  loop: props.loop,
+  created: (s) => {
+    height.value = s.size;
+    radius.value = height.value / 2;
+    setSlideValues(s.track.details);
+  },
+  updated: (slider) => {
+    // console.log("updated:", slider);
+    height.value = slider.size;
+  },
+  dragSpeed: (val) => {
+    // console.log("dragSpeed:", val);
+    return (
+      val *
+      (height.value /
+        ((height.value / 2) * Math.tan(slideDegree * (Math.PI / 180))) /
+        slidesPerView)
+    );
+  },
+  dragStarted: () => {
+    console.log("dragStarted");
+  },
+  dragged: () => {
+    console.log("dragged");
+  },
+  detailsChanged: (slider) => {
+    // console.log("detailsChanged:", slider.track.details);
+    setSlideValues(slider.track.details);
+  },
+  rubberband: !props.loop,
+  mode: "free-snap",
 };
+
+function dragOutsideContainer(slider: KeenSliderInstance) {
+  console.log("dragOutsideContainer:", slider);
+
+  let isDragging = false;
+  const container = slider.container;
+
+  function onMouseDown(e: MouseEvent) {
+    isDragging = true;
+    // Добавляем обработчики для движения и отпускания мыши
+    document.addEventListener("mousemove", onMouseMove);
+    document.addEventListener("mouseup", onMouseUp);
+  }
+
+  function onMouseMove(e: MouseEvent) {
+    if (!isDragging) return;
+
+    slider.emit("dragged");
+  }
+
+  function onMouseUp(e: MouseEvent) {
+    if (!isDragging) return;
+
+    isDragging = false;
+
+    // Удаляем обработчики
+    document.removeEventListener("mousemove", onMouseMove);
+    document.removeEventListener("mouseup", onMouseUp);
+  }
+
+  // Добавляем обработчик нажатия мыши
+  container.addEventListener("mousedown", onMouseDown);
+
+  // Очистка при уничтожении слайдера
+  slider.on("destroyed", () => {
+    container.removeEventListener("mousedown", onMouseDown);
+    document.removeEventListener("mousemove", onMouseMove);
+    document.removeEventListener("mouseup", onMouseUp);
+  });
+}
+
+const [container] = useKeenSlider(options, [dragOutsideContainer]);
 </script>
 
 <style>
 body {
   margin: 0;
-  font-family: 'Inter', sans-serif;
+  font-family: "Inter", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

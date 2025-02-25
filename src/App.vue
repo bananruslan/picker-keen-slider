@@ -9,27 +9,27 @@
     }"
   >
     <div :style="{ width: '70px' }">
-      <Wheel :initIdx="1" :length="24" :width="23" />
+      <Picker :initIdx="1" :length="24" :width="23" />
     </div>
     <div :style="{ width: '70px' }">
-      <Wheel :initIdx="35" :length="60" :width="23" perspective="left" />
+      <Picker :initIdx="35" :length="60" :width="23" perspective="left" />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import Picker from './components/Picker.vue';
+import Picker from "./components/Picker.vue";
 </script>
 
 <style scoped>
 body {
   margin: 0;
-  font-family: 'Inter', sans-serif;
+  font-family: "Inter", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
-[class^='number-slide'],
-[class*=' number-slide'] {
+[class^="number-slide"],
+[class*=" number-slide"] {
   background: grey;
   display: flex;
   align-items: center;
