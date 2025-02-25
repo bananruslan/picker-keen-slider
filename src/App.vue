@@ -9,9 +9,6 @@
     }"
   >
     <div :style="{ width: '70px' }">
-      <Picker :initIdx="1" :length="24" :width="23" />
-    </div>
-    <div :style="{ width: '70px' }">
       <Picker :initIdx="35" :length="60" :width="23" perspective="left" />
     </div>
   </div>

@@ -56,13 +56,13 @@ import type {
 
 const props = withDefaults(
   defineProps<{
-    initIdx: number;
-    loop: boolean;
+    initIdx?: number;
+    loop?: boolean;
     length: number;
-    perspective: string;
-    label: string;
-    width: number;
-    setValue: Function;
+    perspective?: string;
+    label?: string;
+    width?: number;
+    setValue?: Function;
   }>(),
   {
     initIdx: 0,
@@ -90,7 +90,6 @@ const slideValues = ref<
 >([]);
 
 function setSlideValues(details: TrackDetails) {
-  // console.log("setSlideValues:", details);
   const offset = props.loop ? 1 / 2 - 1 / slidesPerView / 2 : 0;
   const values = [];
 
@@ -104,11 +103,8 @@ function setSlideValues(details: TrackDetails) {
       transform: `rotateX(${rotate}deg) translateZ(${radius.value}px)`,
       WebkitTransform: `rotateX(${rotate}deg) translateZ(${radius.value}px)`,
     };
-    const value = props.setValue
-      ? props.setValue(i, details.abs + Math.round(distance))
-      : i;
 
-    values.push({ style, value });
+    values.push({ style, value: i });
   }
 
   slideValues.value = values;
@@ -123,17 +119,16 @@ const options: KeenSliderOptions = {
   vertical: true,
   initial: props.initIdx || 0,
   loop: props.loop,
+  renderMode: "performance",
   created: (s) => {
     height.value = s.size;
     radius.value = height.value / 2;
     setSlideValues(s.track.details);
   },
   updated: (slider) => {
-    // console.log("updated:", slider);
     height.value = slider.size;
   },
   dragSpeed: (val) => {
-    // console.log("dragSpeed:", val);
     return (
       val *
       (height.value /
@@ -141,36 +136,31 @@ const options: KeenSliderOptions = {
         slidesPerView)
     );
   },
-  dragEnded: () => {
-    console.log("dragEnded");
-  },
-  dragStarted: () => {
-    console.log("dragStarted");
-  },
   detailsChanged: (slider) => {
-    // console.log("detailsChanged:", slider.track.details);
     setSlideValues(slider.track.details);
   },
-  rubberband: !props.loop,
+  rubberband: true,
   mode: "free-snap",
 };
 
 function dragOutsideContainer(slider: KeenSliderInstance) {
-  console.log("dragOutsideContainer:", slider);
-
   const breakFactorValue = 2;
+  const speed = slider.options.dragSpeed || 1;
+  const dragSpeed =
+    typeof speed === "function"
+      ? speed
+      : (val: number) => val * (speed as number);
 
   let dragJustStarted = false;
   let isDragging = false;
   let lastValue = 0;
-  let min: number | undefined;
-  let max: number | undefined;
+  let min: number;
+  let max: number;
   let direction = 0;
   let size = 0;
   let windowSize = 0;
   let defaultDirection = 1;
   let sumDistance = 0;
-  let isProperDrag = false;
 
   function setSizes() {
     size = slider.size;
@@ -191,8 +181,6 @@ function dragOutsideContainer(slider: KeenSliderInstance) {
   }
 
   function rubberband(distance: number) {
-    if (min === -Infinity && max === Infinity) return distance;
-
     const length = slider.track.details.length;
     const position = slider.track.details.position;
     const clampedDistance = clamp(distance, min - position, max - position);
@@ -213,16 +201,31 @@ function dragOutsideContainer(slider: KeenSliderInstance) {
 
     const overflow =
       (position < min ? position - min : position - max) / length;
-    // console.log(
-    //   `position < min ? ${position} - ${min} : ${position} - ${max} = ${position}`,
-    // );
     const trackSize = size * length;
     const overflowedSize = Math.abs(overflow * trackSize);
     const p = Math.max(0, 1 - (overflowedSize / windowSize) * breakFactorValue);
+
     return p * p * distance;
   }
 
-  function drag(e: MouseEvent) {
+  function onMouseDown(e: MouseEvent) {
+    isDragging = true;
+
+    sumDistance = 0;
+    dragJustStarted = true;
+    lastValue = e.y;
+
+    // Добавляем обработчики для движения и отпускания мыши
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    slider.container.addEventListener("mouseleave", () =>
+      slider.animator.stop(),
+    );
+  }
+
+  function onMouseMove(e: MouseEvent) {
+    if (!isDragging) return;
+
     const value = e.y;
 
     if (dragJustStarted) {
@@ -231,82 +234,34 @@ function dragOutsideContainer(slider: KeenSliderInstance) {
       slider.emit("dragChecked");
     }
 
-    // if (scrollLock) return (lastValue = value);
-    e.preventDefault;
-
     const distance = rubberband(
-      ((lastValue - value) / size) * defaultDirection,
+      (dragSpeed(lastValue - value) / size) * defaultDirection,
     );
     direction = sign(distance);
-    const position = slider.track.details.position;
-
-    if (
-      (position > min && position < max) ||
-      (position === min && direction > 0) ||
-      (position === max && direction < 0)
-    )
-      // stop(e);
-      e.stopPropagation();
 
     sumDistance += distance;
-    if (!isProperDrag && Math.abs(sumDistance * size) > 5) {
-      isProperDrag = true;
-    }
-    // console.log("distance:", distance);
     slider.track.add(distance);
     lastValue = value;
-  }
 
-  function onMouseDown(e: MouseEvent) {
-    console.log("onMouseDown");
-    isDragging = true;
-
-    isProperDrag = false;
-    sumDistance = 0;
-    dragJustStarted = true;
-    lastValue = e.y;
-
-    // Добавляем обработчики для движения и отпускания мыши
-    window.addEventListener("mousemove", onMouseMove);
-    window.addEventListener("mouseup", onMouseUp);
-    // slider.container.addEventListener("mouseleave", () => {
-    //   console.log("Ебать ты долбаеб");
-    //   slider.emit("dragEnded");
-    // });
-    slider.container.addEventListener("mouseout", () => {
-      console.log("Ебать ты долбаеб");
-      slider.emit("animationStopped");
-      slider.emit("animationEnded");
-      slider.emit("dragEnded");
-    });
-  }
-
-  function onMouseMove(e: MouseEvent) {
-    if (!isDragging) return;
-
-    drag(e);
-
-    // slider.emit("dragged");
+    slider.emit("dragged");
   }
 
   function onMouseUp() {
-    console.log("onMouseUp");
     if (!isDragging) return;
 
     isDragging = false;
+    slider.emit("dragEnded");
 
     // Удаляем обработчики
     window.removeEventListener("mousemove", onMouseMove);
     window.removeEventListener("mouseup", onMouseUp);
-
-    // slider.emit("dragEnded");
-    // slider.emit("animationEnded");
   }
 
-  // Добавляем обработчик нажатия мыши
-  slider.container.addEventListener("mousedown", (e) => {
-    onMouseDown(e);
-    slider.emit("dragEnded");
+  slider.on("created", () => {
+    setSizes();
+
+    // Добавляем обработчик нажатия мыши
+    slider.container.addEventListener("mousedown", onMouseDown);
   });
 
   // Очистка при уничтожении слайдера
@@ -314,10 +269,6 @@ function dragOutsideContainer(slider: KeenSliderInstance) {
     slider.container.removeEventListener("mousedown", onMouseDown);
     window.removeEventListener("mousemove", onMouseMove);
     window.removeEventListener("mouseup", onMouseUp);
-  });
-
-  slider.on("created", () => {
-    setSizes();
   });
 }
 
