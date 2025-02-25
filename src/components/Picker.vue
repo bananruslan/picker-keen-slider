@@ -141,11 +141,11 @@ const options: KeenSliderOptions = {
         slidesPerView)
     );
   },
+  dragEnded: () => {
+    console.log("dragEnded");
+  },
   dragStarted: () => {
     console.log("dragStarted");
-  },
-  dragged: () => {
-    console.log("dragged");
   },
   detailsChanged: (slider) => {
     // console.log("detailsChanged:", slider.track.details);
@@ -158,40 +158,166 @@ const options: KeenSliderOptions = {
 function dragOutsideContainer(slider: KeenSliderInstance) {
   console.log("dragOutsideContainer:", slider);
 
+  const breakFactorValue = 2;
+
+  let dragJustStarted = false;
   let isDragging = false;
-  const container = slider.container;
+  let lastValue = 0;
+  let min: number | undefined;
+  let max: number | undefined;
+  let direction = 0;
+  let size = 0;
+  let windowSize = 0;
+  let defaultDirection = 1;
+  let sumDistance = 0;
+  let isProperDrag = false;
+
+  function setSizes() {
+    size = slider.size;
+    windowSize = window.innerHeight;
+
+    if (slider.track.details) {
+      min = slider.track.details.min;
+      max = slider.track.details.max;
+    }
+  }
+
+  function sign(x: number): number {
+    return (x > 0 ? 1 : 0) - (x < 0 ? 1 : 0) || +x;
+  }
+
+  function clamp(value: number, min: number, max: number): number {
+    return Math.min(Math.max(value, min), max);
+  }
+
+  function rubberband(distance: number) {
+    if (min === -Infinity && max === Infinity) return distance;
+
+    const length = slider.track.details.length;
+    const position = slider.track.details.position;
+    const clampedDistance = clamp(distance, min - position, max - position);
+
+    if (length === 0) return 0;
+
+    if (!slider.options.rubberband) {
+      return clampedDistance;
+    }
+
+    if (position <= max && position >= min) return distance;
+    if (
+      (position < min && direction > 0) ||
+      (position > max && direction < 0)
+    ) {
+      return distance;
+    }
+
+    const overflow =
+      (position < min ? position - min : position - max) / length;
+    // console.log(
+    //   `position < min ? ${position} - ${min} : ${position} - ${max} = ${position}`,
+    // );
+    const trackSize = size * length;
+    const overflowedSize = Math.abs(overflow * trackSize);
+    const p = Math.max(0, 1 - (overflowedSize / windowSize) * breakFactorValue);
+    return p * p * distance;
+  }
+
+  function drag(e: MouseEvent) {
+    const value = e.y;
+
+    if (dragJustStarted) {
+      lastValue = value;
+      dragJustStarted = false;
+      slider.emit("dragChecked");
+    }
+
+    // if (scrollLock) return (lastValue = value);
+    e.preventDefault;
+
+    const distance = rubberband(
+      ((lastValue - value) / size) * defaultDirection,
+    );
+    direction = sign(distance);
+    const position = slider.track.details.position;
+
+    if (
+      (position > min && position < max) ||
+      (position === min && direction > 0) ||
+      (position === max && direction < 0)
+    )
+      // stop(e);
+      e.stopPropagation();
+
+    sumDistance += distance;
+    if (!isProperDrag && Math.abs(sumDistance * size) > 5) {
+      isProperDrag = true;
+    }
+    // console.log("distance:", distance);
+    slider.track.add(distance);
+    lastValue = value;
+  }
 
   function onMouseDown(e: MouseEvent) {
+    console.log("onMouseDown");
     isDragging = true;
+
+    isProperDrag = false;
+    sumDistance = 0;
+    dragJustStarted = true;
+    lastValue = e.y;
+
     // Добавляем обработчики для движения и отпускания мыши
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    // slider.container.addEventListener("mouseleave", () => {
+    //   console.log("Ебать ты долбаеб");
+    //   slider.emit("dragEnded");
+    // });
+    slider.container.addEventListener("mouseout", () => {
+      console.log("Ебать ты долбаеб");
+      slider.emit("animationStopped");
+      slider.emit("animationEnded");
+      slider.emit("dragEnded");
+    });
   }
 
   function onMouseMove(e: MouseEvent) {
     if (!isDragging) return;
 
-    slider.emit("dragged");
+    drag(e);
+
+    // slider.emit("dragged");
   }
 
-  function onMouseUp(e: MouseEvent) {
+  function onMouseUp() {
+    console.log("onMouseUp");
     if (!isDragging) return;
 
     isDragging = false;
 
     // Удаляем обработчики
-    document.removeEventListener("mousemove", onMouseMove);
-    document.removeEventListener("mouseup", onMouseUp);
+    window.removeEventListener("mousemove", onMouseMove);
+    window.removeEventListener("mouseup", onMouseUp);
+
+    // slider.emit("dragEnded");
+    // slider.emit("animationEnded");
   }
 
   // Добавляем обработчик нажатия мыши
-  container.addEventListener("mousedown", onMouseDown);
+  slider.container.addEventListener("mousedown", (e) => {
+    onMouseDown(e);
+    slider.emit("dragEnded");
+  });
 
   // Очистка при уничтожении слайдера
   slider.on("destroyed", () => {
-    container.removeEventListener("mousedown", onMouseDown);
-    document.removeEventListener("mousemove", onMouseMove);
-    document.removeEventListener("mouseup", onMouseUp);
+    slider.container.removeEventListener("mousedown", onMouseDown);
+    window.removeEventListener("mousemove", onMouseMove);
+    window.removeEventListener("mouseup", onMouseUp);
+  });
+
+  slider.on("created", () => {
+    setSizes();
   });
 }
 
